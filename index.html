@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>クロ</title>
+<style>
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    width:100%; height:100%;
+    background:#1a1625;
+    font-family:'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP','Segoe UI',sans-serif;
+    color:#e8e2ff;
+    overflow:hidden;
+    touch-action:manipulation;
+  }
+
+  /* 星空 */
+  .stars { position:fixed; inset:0; pointer-events:none; z-index:0; }
+  .star {
+    position:absolute; background:white; border-radius:50%;
+    animation:twinkle var(--d) ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%,100%{ opacity:0.15; transform:scale(1); }
+    50%{ opacity:0.9; transform:scale(1.5); }
+  }
+
+  /* メインレイアウト */
+  .container {
+    position:relative; z-index:1;
+    display:flex; flex-direction:column; align-items:center;
+    height:100vh; height:100dvh;
+    padding: env(safe-area-inset-top, 12px) 16px env(safe-area-inset-bottom, 16px);
+    gap:0;
+    justify-content:space-between;
+  }
+
+  /* 吹き出し */
+  .speech-bubble {
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(175,169,236,0.35);
+    border-radius:20px;
+    padding:14px 24px;
+    font-size:17px;
+    line-height:1.5;
+    color:#e8e2ff;
+    min-width:min(280px, 80vw);
+    max-width:min(340px, 90vw);
+    text-align:center;
+    position:relative;
+    backdrop-filter:blur(10px);
+    min-height:50px;
+    display:flex; align-items:center; justify-content:center;
+    margin-top:8px;
+  }
+  .speech-bubble::after {
+    content:'';
+    position:absolute; bottom:-13px; left:50%;
+    transform:translateX(-50%);
+    border:7px solid transparent;
+    border-top-color:rgba(175,169,236,0.35);
+  }
+
+  /* ステージ */
+  .stage {
+    position:relative;
+    width:min(340px, 92vw);
+    flex:1;
+    max-height:46vh;
+    min-height:160px;
+  }
+  .ground-line {
+    position:absolute; bottom:0; left:0; right:0; height:1px;
+    background:linear-gradient(90deg,transparent,rgba(175,169,236,0.4),transparent);
+  }
+  .shadow-el {
+    position:absolute; bottom:5px;
+    background:rgba(83,74,183,0.3);
+    border-radius:50%; width:52px; height:13px;
+    filter:blur(5px);
+    transition:width .05s, opacity .05s;
+  }
+  #kuro {
+    position:absolute; bottom:10px;
+    cursor:pointer;
+    filter:drop-shadow(0 0 14px rgba(175,169,236,0.45));
+    transition:filter .3s;
+    /* タップ領域を広げる */
+    padding:8px;
+  }
+  #kuro:active { filter:drop-shadow(0 0 24px rgba(175,169,236,0.9)); }
+
+  /* ボタンパネル */
+  .btn-panel {
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:8px;
+    width:min(380px, 96vw);
+  }
+  button.action {
+    background:rgba(83,74,183,0.22);
+    border:1px solid rgba(175,169,236,0.28);
+    border-radius:14px;
+    padding:12px 4px;
+    color:#c8c0f0;
+    font-size:12px;
+    cursor:pointer;
+    transition:background .15s, transform .1s;
+    font-family:inherit;
+    line-height:1.4;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    min-height:54px;
+    -webkit-user-select:none; user-select:none;
+  }
+  button.action .icon { font-size:18px; }
+  button.action:active { background:rgba(83,74,183,0.55); transform:scale(0.94); }
+
+  /* テキスト入力エリア */
+  .input-area {
+    display:flex; gap:8px; align-items:center;
+    width:min(380px, 96vw);
+  }
+  input[type=text] {
+    flex:1;
+    background:rgba(255,255,255,0.07);
+    border:1px solid rgba(175,169,236,0.3);
+    border-radius:24px;
+    padding:12px 18px;
+    color:#e8e2ff;
+    font-size:15px;
+    outline:none;
+    font-family:inherit;
+    -webkit-appearance:none;
+  }
+  input[type=text]::placeholder { color:rgba(175,169,236,0.38); }
+  input[type=text]:focus { border-color:rgba(175,169,236,0.7); }
+  button.send {
+    background:rgba(83,74,183,0.4);
+    border:1px solid rgba(175,169,236,0.4);
+    border-radius:50%;
+    width:46px; height:46px;
+    color:#e8e2ff; font-size:18px;
+    cursor:pointer; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .15s, transform .1s;
+  }
+  button.send:active { background:rgba(83,74,183,0.7); transform:scale(0.93); }
+
+  /* 音量 */
+  .vol-row {
+    display:flex; align-items:center; gap:10px;
+    font-size:12px; color:rgba(175,169,236,0.45);
+    width:min(380px,96vw);
+    padding:0 4px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  input[type=range] {
+    flex:1; height:4px; accent-color:#AFA9EC;
+    -webkit-appearance:none; appearance:none;
+    background:rgba(175,169,236,0.25); border-radius:2px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:18px; height:18px;
+    border-radius:50%; background:#AFA9EC; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+
+<div class="container">
+  <div class="speech-bubble" id="bubble">やあ！クロだよ！タップしてね♪</div>
+
+  <div class="stage" id="stage">
+    <div class="shadow-el" id="shadow"></div>
+    <svg id="kuro" width="100" height="100" viewBox="0 0 80 80"
+         xmlns="http://www.w3.org/2000/svg" onclick="doAction('hello')">
+      <ellipse id="body" cx="40" cy="58" rx="20" ry="18" fill="#534AB7"/>
+      <ellipse cx="40" cy="62" rx="12" ry="10" fill="#AFA9EC"/>
+      <ellipse id="armL" cx="22" cy="55" rx="5" ry="9" fill="#534AB7" transform="rotate(-15 22 55)"/>
+      <ellipse id="armR" cx="58" cy="55" rx="5" ry="9" fill="#534AB7" transform="rotate(15 58 55)"/>
+      <circle cx="40" cy="32" r="20" fill="#534AB7"/>
+      <ellipse cx="27" cy="17" rx="5" ry="8" fill="#534AB7"/>
+      <ellipse cx="53" cy="17" rx="5" ry="8" fill="#534AB7"/>
+      <ellipse cx="27" cy="17" rx="3" ry="5" fill="#AFA9EC"/>
+      <ellipse cx="53" cy="17" rx="3" ry="5" fill="#AFA9EC"/>
+      <ellipse id="eyeL" cx="33" cy="31" rx="5" ry="6" fill="white"/>
+      <ellipse id="eyeR" cx="47" cy="31" rx="5" ry="6" fill="white"/>
+      <circle id="pupilL" cx="34" cy="32" r="3" fill="#26215C"/>
+      <circle id="pupilR" cx="48" cy="32" r="3" fill="#26215C"/>
+      <circle cx="35" cy="30" r="1.2" fill="white"/>
+      <circle cx="49" cy="30" r="1.2" fill="white"/>
+      <path id="mouth" d="M34 40 Q40 46 46 40" stroke="#26215C" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <ellipse id="blushL" cx="27" cy="37" rx="5" ry="3" fill="#F4C0D1" opacity="0"/>
+      <ellipse id="blushR" cx="53" cy="37" rx="5" ry="3" fill="#F4C0D1" opacity="0"/>
+      <ellipse id="legL" cx="32" cy="74" rx="7" ry="5" fill="#3C3489"/>
+      <ellipse id="legR" cx="48" cy="74" rx="7" ry="5" fill="#3C3489"/>
+      <g id="sparks" opacity="0">
+        <text x="8" y="18" font-size="11" fill="#FAC775">★</text>
+        <text x="56" y="14" font-size="9" fill="#F4C0D1">★</text>
+        <text x="64" y="28" font-size="7" fill="#AFA9EC">✦</text>
+      </g>
+    </svg>
+    <div class="ground-line"></div>
+  </div>
+
+  <div class="btn-panel">
+    <button class="action" onclick="doAction('jump')"><span class="icon">⬆</span>ジャンプ</button>
+    <button class="action" onclick="doAction('bounce')"><span class="icon">🏀</span>バウンド</button>
+    <button class="action" onclick="doAction('fly')"><span class="icon">✈</span>とびまわる</button>
+    <button class="action" onclick="doAction('spin')"><span class="icon">🌀</span>スピン</button>
+    <button class="action" onclick="doAction('run')"><span class="icon">💨</span>走る</button>
+    <button class="action" onclick="doAction('dance')"><span class="icon">💃</span>ダンス</button>
+    <button class="action" onclick="doAction('sleep')"><span class="icon">😴</span>ねむい</button>
+    <button class="action" onclick="doAction('happy')"><span class="icon">😊</span>うれしい</button>
+  </div>
+
+  <div class="input-area">
+    <input type="text" id="textIn" placeholder="言葉を入れてね…"
+           onkeydown="if(event.key==='Enter'){this.blur();doAction('custom')}"/>
+    <button class="send" onclick="doAction('custom')">→</button>
+  </div>
+
+  <div class="vol-row">
+    🔊
+    <input type="range" id="vol" min="0" max="1" step="0.05" value="0.5"/>
+    🔔
+  </div>
+</div>
+
+<script>
+// 星生成
+const starsEl=document.getElementById('stars');
+for(let i=0;i<60;i++){
+  const s=document.createElement('div');
+  s.className='star';
+  const sz=Math.random()*2+1;
+  s.style.cssText=`width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${2+Math.random()*3}s;animation-delay:${Math.random()*3}s`;
+  starsEl.appendChild(s);
+}
+
+// ステージサイズを動的取得
+function stageWidth(){ return document.getElementById('stage').offsetWidth; }
+function stageHeight(){ return document.getElementById('stage').offsetHeight; }
+function kuroStartX(){ return stageWidth()/2 - 50; }
+
+// --- Web Audio ---
+let ctx=null;
+function getCtx(){
+  if(!ctx) ctx=new(window.AudioContext||window.webkitAudioContext)();
+  if(ctx.state==='suspended') ctx.resume();
+  return ctx;
+}
+function getVol(){ return parseFloat(document.getElementById('vol').value); }
+
+function playTone(freq,dur=0.18,type='sine',vol=null){
+  const c=getCtx(),o=c.createOscillator(),g=c.createGain(),v=vol!==null?vol:getVol();
+  o.type=type; o.frequency.setValueAtTime(freq,c.currentTime);
+  g.gain.setValueAtTime(0,c.currentTime);
+  g.gain.linearRampToValueAtTime(v*0.22,c.currentTime+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+dur);
+  o.connect(g);g.connect(c.destination);
+  o.start();o.stop(c.currentTime+dur+0.05);
+}
+function playChord(freqs,dur=0.35){ freqs.forEach((f,i)=>setTimeout(()=>playTone(f,dur,'sine'),i*18)); }
+function playGlide(from,to,dur=0.25){
+  const c=getCtx(),o=c.createOscillator(),g=c.createGain();
+  o.type='sine';
+  o.frequency.setValueAtTime(from,c.currentTime);
+  o.frequency.linearRampToValueAtTime(to,c.currentTime+dur);
+  g.gain.setValueAtTime(0,c.currentTime);
+  g.gain.linearRampToValueAtTime(getVol()*0.2,c.currentTime+0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+dur+0.05);
+  o.connect(g);g.connect(c.destination);
+  o.start();o.stop(c.currentTime+dur+0.1);
+}
+function playArpUp(notes=[523,659,784],gap=80){ notes.forEach((n,i)=>setTimeout(()=>playTone(n,0.25),i*gap)); }
+function playArpDown(notes=[784,659,523],gap=80){ notes.forEach((n,i)=>setTimeout(()=>playTone(n,0.25),i*gap)); }
+function playWobble(freq=440,dur=0.5){
+  const c=getCtx(),o=c.createOscillator(),lfo=c.createOscillator(),lg=c.createGain(),g=c.createGain();
+  lfo.frequency.value=5;lg.gain.value=8;
+  lfo.connect(lg);lg.connect(o.frequency);
+  o.type='sine';o.frequency.value=freq;
+  g.gain.setValueAtTime(0,c.currentTime);
+  g.gain.linearRampToValueAtTime(getVol()*0.18,c.currentTime+0.04);
+  g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+dur);
+  o.connect(g);g.connect(c.destination);
+  lfo.start();o.start();o.stop(c.currentTime+dur+0.05);lfo.stop(c.currentTime+dur+0.05);
+}
+function playLand(){
+  const c=getCtx(),o=c.createOscillator(),g=c.createGain();
+  o.type='sine';
+  o.frequency.setValueAtTime(120,c.currentTime);
+  o.frequency.exponentialRampToValueAtTime(40,c.currentTime+0.12);
+  g.gain.setValueAtTime(getVol()*0.3,c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+0.18);
+  o.connect(g);g.connect(c.destination);
+  o.start();o.stop(c.currentTime+0.2);
+}
+function playSleep(){ [392,349,330,294].forEach((n,i)=>setTimeout(()=>playTone(n,0.5),i*220)); }
+function playDanceBeat(times=4){
+  for(let i=0;i<times;i++){
+    setTimeout(()=>{ playTone(523,0.12); playTone(659,0.12); },i*300);
+    setTimeout(()=>playTone(392,0.1),i*300+150);
+  }
+}
+function playFootstep(){ playTone(180+Math.random()*40,0.08,'sine',getVol()*0.5); }
+
+// --- マスコット ---
+const kuro=document.getElementById('kuro');
+const shadow=document.getElementById('shadow');
+const bubble=document.getElementById('bubble');
+const mouth=document.getElementById('mouth');
+const eyeL=document.getElementById('eyeL');
+const eyeR=document.getElementById('eyeR');
+const blushL=document.getElementById('blushL');
+const blushR=document.getElementById('blushR');
+const armL=document.getElementById('armL');
+const armR=document.getElementById('armR');
+const legL=document.getElementById('legL');
+const legR=document.getElementById('legR');
+const sparks=document.getElementById('sparks');
+
+const GROUND=10;
+let raf=null,posX,posY=GROUND;
+
+function initPos(){ posX=kuroStartX(); setPos(posX,GROUND); }
+function stopAnim(){ if(raf){cancelAnimationFrame(raf);raf=null;} }
+
+function setPos(x,y){
+  posX=x;posY=y;
+  kuro.style.left=x+'px';
+  kuro.style.bottom=y+'px';
+  const sc=Math.max(0.2,1-y/300);
+  shadow.style.width=(52*sc)+'px';
+  shadow.style.opacity=sc*0.6;
+  shadow.style.left=(x+50)+'px';
+}
+
+function resetFace(){
+  mouth.setAttribute('d','M34 40 Q40 46 46 40');
+  eyeL.setAttribute('ry','6');eyeR.setAttribute('ry','6');
+  blushL.setAttribute('opacity','0');blushR.setAttribute('opacity','0');
+  armL.setAttribute('transform','rotate(-15 22 55)');
+  armR.setAttribute('transform','rotate(15 58 55)');
+  legL.setAttribute('transform','');legR.setAttribute('transform','');
+  sparks.setAttribute('opacity','0');
+  kuro.style.transform='';
+}
+
+function doAction(type){
+  stopAnim();resetFace();initPos();
+  const inp=document.getElementById('textIn').value.trim();
+  if(type==='custom'&&inp){
+    if(/うれし|やった|好き|ありがと|たのし/.test(inp)) type='happy';
+    else if(/かなし|つらい|いや|こわ|泣/.test(inp)) type='sad';
+    else if(/びっくり|えっ|まじ|うそ/.test(inp)) type='surprise';
+    else if(/ねむ|眠|おやすみ|疲/.test(inp)) type='sleep';
+    else if(/おどり|ダンス|いえい/.test(inp)) type='dance';
+    else if(/ジャンプ|とべ/.test(inp)) type='jump';
+    else type='hello';
+  }
+
+  const sw=stageWidth();
+
+  if(type==='hello'){
+    bubble.textContent='やあ！よろしくね！';
+    playArpUp([523,659,784,1047]);
+    armL.setAttribute('transform','rotate(-60 22 55)');
+    blushL.setAttribute('opacity','0.7');blushR.setAttribute('opacity','0.7');
+    let t=0,up=true,iv=setInterval(()=>{
+      t+=up?5:-5;if(t>=20)up=false;if(t<=0)up=true;
+      armL.setAttribute('transform',`rotate(${-60+t} 22 55)`);
+    },50);
+    setTimeout(()=>{clearInterval(iv);resetFace();},2000);
+
+  }else if(type==='jump'){
+    bubble.textContent='えいっ！ジャンプ！';
+    playGlide(300,700,0.2);
+    armL.setAttribute('transform','rotate(-80 22 55)');
+    armR.setAttribute('transform','rotate(80 58 55)');
+    blushL.setAttribute('opacity','0.6');blushR.setAttribute('opacity','0.6');
+    let vy=22;
+    function step(){
+      vy-=1.1;posY+=vy;
+      if(posY<=GROUND){
+        posY=GROUND;playLand();
+        kuro.style.transform='scaleY(0.75) scaleX(1.3)';
+        setTimeout(()=>{kuro.style.transform='';resetFace();bubble.textContent='高かった〜！';},200);
+        setPos(posX,posY);return;
+      }
+      kuro.style.transform=`scaleY(${1+posY/260}) scaleX(${Math.max(0.75,1-posY/270)})`;
+      setPos(posX,posY);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+
+  }else if(type==='bounce'){
+    bubble.textContent='ぴょんぴょん！';
+    let vy=18,cnt=0;
+    function step(){
+      vy-=0.95;posY+=vy;
+      if(posY<=GROUND){
+        posY=GROUND;cnt++;
+        playGlide(420-cnt*35,210-cnt*12,0.1);
+        vy=18-cnt*3;
+        kuro.style.transform='scaleY(0.72) scaleX(1.32)';
+        setTimeout(()=>kuro.style.transform='',90);
+        if(cnt>=5){setPos(posX,GROUND);resetFace();bubble.textContent='ぴょんぴょん楽しい！';return;}
+      }
+      setPos(posX,posY);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+
+  }else if(type==='fly'){
+    bubble.textContent='わーい！とんでるー！';
+    playArpUp([523,659,784,1047,1319],100);
+    armL.setAttribute('transform','rotate(-100 22 55)');
+    armR.setAttribute('transform','rotate(100 58 55)');
+    blushL.setAttribute('opacity','0.8');blushR.setAttribute('opacity','0.8');
+    sparks.setAttribute('opacity','1');
+    let t=0;
+    const maxY=stageHeight()-60;
+    function step(){
+      t+=0.04;
+      const x=10+(Math.sin(t*0.7)+1)/2*(sw-120);
+      const y=40+Math.sin(t)*Math.min(maxY*0.4,55)+Math.sin(t*2.1)*18;
+      kuro.style.transform=`rotate(${Math.cos(t*0.7)*20}deg)`;
+      setPos(x,y);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+    const flyIv=setInterval(()=>playWobble(600+Math.random()*200,0.3),900);
+    setTimeout(()=>{stopAnim();clearInterval(flyIv);initPos();resetFace();bubble.textContent='たのしかった〜！';playArpDown();},5000);
+
+  }else if(type==='spin'){
+    bubble.textContent='くるくる〜！';
+    playChord([523,659,784],0.5);
+    sparks.setAttribute('opacity','1');
+    let angle=0,vy2=14;
+    function step(){
+      angle+=14;vy2-=0.85;posY+=vy2;
+      if(posY<GROUND){posY=GROUND;vy2=0;}
+      kuro.style.transform=`rotate(${angle}deg)`;
+      setPos(posX,posY);
+      if(angle>=720){stopAnim();kuro.style.transform='';initPos();resetFace();bubble.textContent='目がまわった〜！';playWobble(330,0.4);return;}
+      raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+
+  }else if(type==='run'){
+    bubble.textContent='ダッシュ！💨';
+    let x=kuroStartX(),dir=1,t=0,sc=0;
+    function step(){
+      t+=0.25;x+=dir*6;sc++;
+      if(x>sw-110){dir=-1;kuro.style.transform='scaleX(-1)';}
+      if(x<10){dir=1;kuro.style.transform='scaleX(1)';}
+      legL.setAttribute('transform',`rotate(${Math.sin(t)*35} 32 74)`);
+      legR.setAttribute('transform',`rotate(${-Math.sin(t)*35} 48 74)`);
+      armL.setAttribute('transform',`rotate(${-15+Math.sin(t)*45} 22 55)`);
+      armR.setAttribute('transform',`rotate(${15-Math.sin(t)*45} 58 55)`);
+      if(sc%12===0)playFootstep();
+      setPos(x,GROUND);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+    setTimeout(()=>{stopAnim();initPos();resetFace();bubble.textContent='はやかった〜！';playArpUp();},4500);
+
+  }else if(type==='dance'){
+    bubble.textContent='イエーイ！おどるよ！';
+    playDanceBeat(5);
+    blushL.setAttribute('opacity','0.7');blushR.setAttribute('opacity','0.7');
+    mouth.setAttribute('d','M32 40 Q40 48 48 40');
+    sparks.setAttribute('opacity','1');
+    let t=0;
+    function step(){
+      t+=0.18;
+      const s=Math.sin(t);
+      document.getElementById('body').setAttribute('transform',`rotate(${s*12} 40 58)`);
+      armL.setAttribute('transform',`rotate(${-15+s*50} 22 55)`);
+      armR.setAttribute('transform',`rotate(${15-s*50} 58 55)`);
+      setPos(posX,GROUND);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+    setTimeout(()=>{stopAnim();initPos();resetFace();bubble.textContent='たのしかった！';},4500);
+
+  }else if(type==='sleep'){
+    bubble.textContent='zzz…おやすみ…zzz';
+    playSleep();
+    eyeL.setAttribute('ry','2');eyeR.setAttribute('ry','2');
+    mouth.setAttribute('d','M35 42 Q40 44 45 42');
+    let t=0;
+    function step(){
+      t+=0.04;
+      kuro.style.transform=`rotate(${Math.sin(t)*6}deg) translateY(${Math.sin(t)*2}px)`;
+      setPos(posX,GROUND);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+    setTimeout(()=>{stopAnim();resetFace();bubble.textContent='ふあ〜、起きた！';playArpUp([330,415,523]);},5500);
+
+  }else if(type==='happy'){
+    bubble.textContent='やったー！うれしいな！';
+    playChord([523,659,784,1047],0.5);
+    blushL.setAttribute('opacity','0.9');blushR.setAttribute('opacity','0.9');
+    mouth.setAttribute('d','M32 40 Q40 50 48 40');
+    sparks.setAttribute('opacity','1');
+    let t=0;
+    function step(){
+      t+=0.15;
+      setPos(posX,GROUND+Math.abs(Math.sin(t))*12);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+    setTimeout(()=>{stopAnim();initPos();resetFace();bubble.textContent='しあわせ〜！';},3500);
+
+  }else if(type==='sad'){
+    bubble.textContent='うぅ…かなしいよ…';
+    playArpDown([330,294,262,220],150);
+    mouth.setAttribute('d','M34 44 Q40 37 46 44');
+    eyeL.setAttribute('ry','4');eyeR.setAttribute('ry','4');
+    let t=0;
+    function step(){
+      t+=0.08;
+      kuro.style.transform=`rotate(${Math.sin(t)*5}deg)`;
+      setPos(posX,GROUND);raf=requestAnimationFrame(step);
+    }
+    raf=requestAnimationFrame(step);
+    setTimeout(()=>{stopAnim();resetFace();bubble.textContent='…なぐさめて';},4000);
+
+  }else if(type==='surprise'){
+    bubble.textContent='えっ！？ほんとに！？';
+    playGlide(200,900,0.15);
+    eyeL.setAttribute('ry','9');eyeR.setAttribute('ry','9');
+    mouth.setAttribute('d','M35 42 Q40 48 45 42');
+    let cnt=0,big=true;
+    const iv=setInterval(()=>{
+      kuro.style.transform=big?'scale(1.07)':'scale(0.97)';
+      big=!big;cnt++;
+      if(cnt>12){clearInterval(iv);kuro.style.transform='';resetFace();bubble.textContent='びっくりした〜！';}
+    },80);
+  }
+}
+
+// 初期位置
+window.addEventListener('load',initPos);
+window.addEventListener('resize',()=>{stopAnim();resetFace();initPos();});
+
+// ランダムつぶやき
+const lines=['ひまだな〜','ねむいなぁ…','タップしてよ！','きょうもいい天気！','なにしてるの？','ぼくのこと見てる？'];
+let li=0;
+setInterval(()=>{if(!raf){bubble.textContent=lines[li%lines.length];li++;}},8000);
+</script>
+</body>
+</html>
